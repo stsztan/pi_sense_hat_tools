@@ -3,15 +3,14 @@ import cachetools.func
 import datetime
 import logging
 import logging.config
-import pathlib
 import random
-import os
-import requests
 import sys
 import time
 import urllib.request, urllib.error, urllib.parse
 import yaml
 from utils.auto_config_params_handler import auto_param_config
+from utils.url_tools import fetch_url
+from utils.file_tools import save_html, save_json
 
 
 DEV_MACHINE = auto_param_config('-m', '--dev_machine',
@@ -22,10 +21,6 @@ def is_dev():
     return sys.platform == DEV_MACHINE
 
 
-data_folder = auto_param_config('-d', '--data_folder',
-                                help='data folder saving json')
-default_encoding = auto_param_config('-e', '--encodings',
-                                     help='default text/json encoding')
 min_ttl = 10 if is_dev() else 10 * 25
 max_ttl = 30 if is_dev() else 10 * 65
 max_pages = 1  # limiting max. pages query
@@ -68,90 +63,6 @@ def get_base_url():
 
 root_url = auto_param_config('-r', '--url_root', help='url domain root')
 base_url = auto_param_config('-b', '--url_base', help='base fetch url')
-user_agent = auto_param_config('-u', '--user_agent',
-                               help='fetch user agent text')
-
-
-req = {
- "headers": {
-     "User-Agent": user_agent,
-     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-     "Accept-Language": "en-US,en;q=0.5",
-     "Upgrade-Insecure-Requests": "1",
-     "Sec-Fetch-Dest": "document",
-     "Sec-Fetch-Mode": "navigate",
-     "Sec-Fetch-Site": "same-origin",
-     "Sec-Fetch-User": "?1"
- },
- "referrer": root_url,
- "method": "GET",
- "mode": "cors"
-}
-
-
-def get_abs_path(file_name):
-    date_folder = urllib.parse.quote(
-        str(datetime.date.today().isoformat()),
-        safe='')
-    base_folder = pathlib.Path.joinpath(
-            pathlib.Path(
-                os.getcwd()),
-            pathlib.Path(data_folder))
-    subfolder = pathlib.Path.joinpath(
-            base_folder,
-            pathlib.Path(date_folder))
-    return pathlib.Path.joinpath(
-        subfolder,
-        file_name)
-
-
-def createAndOpen(file_path, mode, encoding=default_encoding):
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        return open(file_path, mode, encoding=encoding)
-    except OSError as io_error:
-        logger.exception(f'Error creating {str(file_path)} '
-                         f'directory structure or file: {str(io_error)}')
-
-
-def fetch_url(url: str):
-    try:
-        logger.info(f'Fetching: {url}')
-        response = requests.get(url, headers=req['headers'])
-        html_content = response.content.decode(default_encoding)
-        return html_content
-    except urllib.error.HTTPError as e:
-        logger.exception(str(e))
-        return e
-
-
-def save_html(html: str, url=''):
-    safe_url = urllib.parse.quote(url, safe='')
-    current_time = datetime.datetime.now().strftime('%Y-%m-%dT%H.%M.%S_%f%z')
-    file_name = f'{safe_url}-{current_time}.html'
-    file_path = get_abs_path(file_name)
-    logger.info(file_path)
-    try:
-        with createAndOpen(file_path, 'w', encoding=default_encoding) as exchange_file:
-            exchange_file.write(html)
-        return str(file_path)
-    except OSError as e:
-        logger.exception(str(e))
-
-
-def save_json(json_content: str, file_name: str, ext: str = 'json'):
-    time_str = datetime.datetime.now().strftime('%Y-%m-%dT%H.%M.%S_%f%z')
-    file_path = get_abs_path('.'.join([
-        '-'.join([time_str, urllib.parse.quote(file_name, safe='')]),
-        ext]))
-    logger.info(f'Saving {file_name} to {data_folder} folder.')
-    try:
-        with createAndOpen(file_path, 'w') as exchange_file:
-            file_content = str(json_content)
-            exchange_file.write(file_content)
-    except OSError as io_error:
-        logger.exception(
-            f'{time_str} - Error writing {file_name} file: {str(io_error)}')
 
 
 def handle_subpages(html: str):
